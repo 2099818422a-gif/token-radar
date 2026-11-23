@@ -3,9 +3,14 @@
 // Reads the sealed snapshot at /input/snapshot.json (or --input <file|dir>),
 // scores every pre-token protocol with the model in lib/model.ts, writes the
 // ranked board to /output/board.json, writes the dashboard's data beside the
-// page as /output/data.js, copies this repository's dashboard/ and
-// screenshots/ into /output, and writes /output/dossier.json with the
-// vendored make.fun library — the summary the judge reads.
+// page as /output/data.js, copies this repository's dashboard/ into /output,
+// decodes the repository's base64 screenshots into /output/screenshots/ as
+// PNGs, and writes /output/dossier.json with the vendored make.fun library —
+// the summary the judge reads.
+//
+// The screenshots are stored base64-encoded in screenshots/ (*.png.b64)
+// because the upload channel only carries UTF-8 text; the bytes they decode
+// to are the real headless-browser renders of this dashboard, nothing else.
 //
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts --input ../input/snapshot.json
@@ -75,16 +80,35 @@ if (dash.length === 0) {
   process.stderr.write('token radar: dashboard/ is empty: the page is what the judge reads\n');
   process.exit(1);
 }
-const shots = copyFiles(join(here, 'screenshots'), join(out, 'screenshots'));
+
+/** Decode the repository's base64 screenshots into `to` as PNGs, in name order. */
+function writeScreenshots(from: string, to: string): string[] {
+  if (!existsSync(from)) return [];
+  mkdirSync(to, { recursive: true });
+  const written: string[] = [];
+  for (const name of readdirSync(from).sort()) {
+    if (!name.endsWith('.png.b64')) continue;
+    const pngName = name.slice(0, -4);
+    if (!IMAGE_NAME.test(pngName)) {
+      process.stderr.write(`token radar: screenshots/${pngName}: a name is letters, digits and . _ -, 1 to 128 characters\n`);
+      process.exit(1);
+    }
+    const bytes = Buffer.from(readFileSync(join(from, name), 'utf8').replace(/\s/g, ''), 'base64');
+    const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    if (bytes.length < 8 || !PNG_MAGIC.every((b, i) => bytes[i] === b)) {
+      process.stderr.write(`token radar: screenshots/${name} does not decode to a PNG\n`);
+      process.exit(1);
+    }
+    writeFileSync(join(to, pngName), bytes);
+    written.push(pngName);
+  }
+  return written;
+}
+
+const shots = writeScreenshots(join(here, 'screenshots'), join(out, 'screenshots'));
 if (shots.length < 3) {
   process.stderr.write(`token radar: screenshots/ holds ${shots.length} image${shots.length === 1 ? '' : 's'}: hand in 3, the board, a detail view and a filtered view\n`);
   process.exit(1);
-}
-for (const name of shots) {
-  if (!IMAGE_NAME.test(name)) {
-    process.stderr.write(`token radar: screenshots/${name}: a name is letters, digits and . _ -, 1 to 128 characters\n`);
-    process.exit(1);
-  }
 }
 
 // The dossier is written last: the scorer rebuilds it from this /output and compares bytes.

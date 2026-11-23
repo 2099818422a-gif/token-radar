@@ -35,6 +35,10 @@ node gate.mjs out path/to/snapshot.json
 
 The run is deterministic: the same snapshot bytes in give the same output bytes out.
 
+## Screenshots
+
+`screenshots/` holds the three dashboard views as base64 text (`*.png.b64`): the upload channel only carries UTF-8, so the PNGs travel encoded and `main.ts` decodes them into `/output/screenshots/` at build time. The bytes are the real headless-Chromium renders of this dashboard — the board, a protocol's detail drawer, and a category-filtered view — nothing else.
+
 ## Referral
 
 Built with [superbot.gg](https://superbot.gg) — use referral code `stsp86ma` when you sign up.
